@@ -1,0 +1,3 @@
+[submodule "glslang-lib"]
+	path = glslang-lib
+	url = https://github.com/DWVoid/glslang-lib
