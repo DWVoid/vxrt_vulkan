@@ -16,7 +16,10 @@ find_package(Boost REQUIRED COMPONENTS system)
 
 # Link SDL2
 set(DEPS_INCLUDE ${DEPS_INCLUDE} ${SDL2_INCLUDE_DIR})
-set(DEPS_LIB ${DEPS_LIB} ${SDL2_LIBRARY} Vulkan::Vulkan Boost::system)
+set(DEPS_LIB ${DEPS_LIB} ${SDL2_LIBRARY}
+    Vulkan::Vulkan glslang glslSPIRV glslang-default-resource-limits
+    Boost::system
+    )
 
 # Build GLSLANG
 add_subdirectory(glslang-lib glslang)

@@ -4,6 +4,7 @@
 #include "../vulkan/builder.h"
 #include "../vulkan/application.h"
 #include "../vulkan/queue.h"
+#include "../vulkan/shader.h"
 
 namespace {
     struct ResultPack {
@@ -11,6 +12,7 @@ namespace {
         vk::UniqueSwapchainKHR SwapChain;
         std::vector<vk::UniqueImageView> ImageViews;
         vk::UniqueRenderPass RenderPass;
+        vk::UniquePipeline Pipeline;
         std::shared_ptr<SDL::Window> Window;
         std::unique_ptr<Vulkan::VulkanFacet> WindowVk;
     };
@@ -243,13 +245,32 @@ namespace {
         }
     };
 
+    class ShaderCompile : public InitializeBuildStep {
+    public:
+        void Build(Vulkan::Builder& builder) override {
+            auto& result = GetResults(builder);
+            using C = Vulkan::Compiler;
+            C::Load();
+            C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eVertex, ""));
+            C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eFragment, ""));
+            C::Unload();
+        }
+    };
+
     class PipelineBuilder : public InitializeBuildStep {
     public:
         void Build(Vulkan::Builder& builder) override {
+            auto& result = GetResults(builder);
+            vk::DescriptorSetLayoutBinding descriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex);
+            vk::UniqueDescriptorSetLayout descriptorSetLayout = result.Device->createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), 1, &descriptorSetLayoutBinding));
+
+            // create a PipelineLayout using that DescriptorSetLayout
+            vk::UniquePipelineLayout pipelineLayout = result.Device->createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), 1, &descriptorSetLayout.get()));
+
             vk::PipelineShaderStageCreateInfo pipelineShaderStageCreateInfos[2] =
                     {
-                            vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex, vertexShaderModule.get(), "main"),
-                            vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment, fragmentShaderModule.get(), "main")
+                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, vertexShaderModule.get(), "main"),
+                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShaderModule.get(), "main")
                     };
 
             vk::VertexInputBindingDescription vertexInputBindingDescription(0, sizeof(coloredCubeData[0]));
@@ -341,11 +362,10 @@ namespace {
                             &pipelineColorBlendStateCreateInfo,         // pColorBlendState
                             &pipelineDynamicStateCreateInfo,            // pDynamicState
                             pipelineLayout.get(),                       // layout
-                            renderPass.get()                            // renderPass
+                            result.RenderPass.get()                            // renderPass
                     );
 
-            vk::UniquePipeline pipeline = device->createGraphicsPipelineUnique(nullptr, graphicsPipelineCreateInfo);
-
+            result.Pipeline = result.Device->createGraphicsPipelineUnique(nullptr, graphicsPipelineCreateInfo);
         }
     private:
     };

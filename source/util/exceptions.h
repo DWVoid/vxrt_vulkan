@@ -4,13 +4,13 @@
 #include <exception>
 #include <type_traits>
 
-namespace Utils {
-    class NullPointerException : public std::exception {
-    public:
-        const char* what() const noexcept override {
-            return "Got Null Pointer Where None Null-Pointer Expected";
-        }
+#define VXRT_EXCEPTION(_class, _what)\
+    struct _class : std::exception {\
+        const char* what() const noexcept override { return _what; }\
     };
+
+namespace Utils {
+    VXRT_EXCEPTION(NullPointerException, "Got Null Pointer Where None-Null Pointer Expected")
 
     template <class T, class = typename std::is_pointer<T>::type>
     T RequireNonNull(T pointer) {
@@ -36,3 +36,5 @@ namespace Utils {
         throw NullPointerException();
     }
 }
+
+
