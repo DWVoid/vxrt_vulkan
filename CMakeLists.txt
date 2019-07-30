@@ -17,7 +17,7 @@ find_package(Boost REQUIRED COMPONENTS system)
 # Link SDL2
 set(DEPS_INCLUDE ${DEPS_INCLUDE} ${SDL2_INCLUDE_DIR})
 set(DEPS_LIB ${DEPS_LIB} ${SDL2_LIBRARY}
-    Vulkan::Vulkan glslang glslSPIRV glslang-default-resource-limits
+    Vulkan::Vulkan glslang SPIRV glslang-default-resource-limits
     Boost::system
     )
 
@@ -29,3 +29,10 @@ file(GLOB_RECURSE SRC "${CMAKE_SOURCE_DIR}/source/*.*")
 add_executable(vxrt_vulkan ${SRC})
 target_include_directories(vxrt_vulkan PUBLIC ${DEPS_INCLUDE})
 target_link_libraries(vxrt_vulkan ${DEPS_LIB})
+
+# Add Asset Copy Step
+add_custom_command(
+    TARGET vxrt_vulkan PRE_LINK
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/assets
+    ${CMAKE_CURRENT_BINARY_DIR}/assets)

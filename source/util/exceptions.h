@@ -11,6 +11,7 @@
 
 namespace Utils {
     VXRT_EXCEPTION(NullPointerException, "Got Null Pointer Where None-Null Pointer Expected")
+    VXRT_EXCEPTION(Bailout, "Bailing Out")
 
     template <class T, class = typename std::is_pointer<T>::type>
     T RequireNonNull(T pointer) {

@@ -5,16 +5,31 @@
 #include "../vulkan/application.h"
 #include "../vulkan/queue.h"
 #include "../vulkan/shader.h"
+#include "../util/assets.h"
 
 namespace {
     struct ResultPack {
+        std::shared_ptr<SDL::Window> Window;
+        std::unique_ptr<Vulkan::VulkanFacet> WindowVk;
         vk::UniqueDevice Device;
+        vk::Format SurfaceFormat;
         vk::UniqueSwapchainKHR SwapChain;
         std::vector<vk::UniqueImageView> ImageViews;
         vk::UniqueRenderPass RenderPass;
+        vk::UniqueShaderModule Vertex;
+        vk::UniqueShaderModule Pixel;
         vk::UniquePipeline Pipeline;
-        std::shared_ptr<SDL::Window> Window;
-        std::unique_ptr<Vulkan::VulkanFacet> WindowVk;
+
+        ~ResultPack() {
+            Pipeline.reset();
+            Pixel.reset();
+            Vertex.reset();
+            RenderPass.reset();
+            for (auto& x : ImageViews) x.reset();
+            SwapChain.reset();
+            Device.reset();
+            WindowVk.reset();
+        }
     };
 
     constexpr const char* PhysicalDeviceName = "select.physical_device";
@@ -117,7 +132,7 @@ namespace {
             auto& result = GetResults(builder);
             Setup(builder, result);
             auto surface = result.WindowVk->GetSurface();
-            vk::Format format = SelectFormat(surface);
+            vk::Format format = result.SurfaceFormat = SelectFormat(surface);
             SwapChain = Device.createSwapchainKHRUnique(BuildCreateInfo(surface, format));
             BuildImageView(format);
             result.SwapChain = std::move(SwapChain);
@@ -229,12 +244,16 @@ namespace {
     public:
         void Build(Vulkan::Builder& builder) override {
             auto& results = GetResults(builder);
-            vk::AttachmentDescription attachmentDescriptions[1];
-            attachmentDescriptions[0] = vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), ,
+            vk::AttachmentDescription attachmentDescriptions[2];
+            attachmentDescriptions[0] = vk::AttachmentDescription({}, results.SurfaceFormat,
                     vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear,
                     vk::AttachmentStoreOp::eStore, vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-                    vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR
-            );
+                    vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+            attachmentDescriptions[1] = vk::AttachmentDescription({}, vk::Format::eD16Unorm,
+                    vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear,
+                    vk::AttachmentStoreOp::eDontCare, vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+                    vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
             vk::AttachmentReference colorReference(0, vk::ImageLayout::eColorAttachmentOptimal);
             vk::AttachmentReference depthReference(1, vk::ImageLayout::eDepthStencilAttachmentOptimal);
             vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0, nullptr,
@@ -251,8 +270,22 @@ namespace {
             auto& result = GetResults(builder);
             using C = Vulkan::Compiler;
             C::Load();
-            C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eVertex, ""));
-            C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eFragment, ""));
+            try {
+                result.Vertex = C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eVertex,
+                        Utils::Assets::LoadFullText("/shaders/Final.vsh")));
+                result.Pixel = C::CreateModule(result.Device, C::CompileGlslang(vk::ShaderStageFlagBits::eFragment,
+                        Utils::Assets::LoadFullText("/shaders/Final.fsh")));
+            }
+            catch (Vulkan::Compiler::GlslangCompileFailure& e) {
+                std::cout << "Shader Compile Failure:" << std::endl <<
+                          "info: " << e.what() << std::endl << "debug: " << e.debug() << std::endl;
+                throw Utils::Bailout();
+            }
+            catch (Vulkan::Compiler::GlslangLinkFailure& e) {
+                std::cout << "Shader Link Failure:" << std::endl <<
+                          "info: " << e.what() << std::endl << "debug: " << e.debug() << std::endl;
+                throw Utils::Bailout();
+            }
             C::Unload();
         }
     };
@@ -269,11 +302,11 @@ namespace {
 
             vk::PipelineShaderStageCreateInfo pipelineShaderStageCreateInfos[2] =
                     {
-                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, vertexShaderModule.get(), "main"),
-                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, fragmentShaderModule.get(), "main")
+                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eVertex, result.Vertex.get(), "main"),
+                            vk::PipelineShaderStageCreateInfo({}, vk::ShaderStageFlagBits::eFragment, result.Pixel.get(), "main")
                     };
 
-            vk::VertexInputBindingDescription vertexInputBindingDescription(0, sizeof(coloredCubeData[0]));
+            vk::VertexInputBindingDescription vertexInputBindingDescription(0, 4);//sizeof(coloredCubeData[0]));
             vk::VertexInputAttributeDescription vertexInputAttributeDescriptions[2] =
                     {
                             vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32A32Sfloat, 0),

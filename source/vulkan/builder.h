@@ -24,8 +24,9 @@ namespace Vulkan {
            return *this;
         }
 
-        auto& Use(std::unique_ptr<IBuilder> builder) {
-            _builders.push_back(std::move(builder));
+        template <class T, class ...Ts, class = std::is_convertible<T*, IBuilder*>>
+        auto& Use(Ts&&... args) {
+            _builders.push_back(std::make_unique<T>(std::forward<Ts>(args)...));
             return *this;
         }
 

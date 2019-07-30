@@ -14,6 +14,8 @@ namespace Vulkan {
 
     class VulkanFacet {
     public:
+        ~VulkanFacet() { _surface.reset(); }
+
         VulkanFacet(const VulkanFacet&) = delete;
 
         VulkanFacet& operator=(const VulkanFacet&) = delete;
@@ -24,19 +26,19 @@ namespace Vulkan {
 
         vk::SurfaceKHR GetSurface() const noexcept { return _surface.get(); }
     private:
-        explicit VulkanFacet(std::weak_ptr<SDL::Window> window, VkSurfaceKHR surface) noexcept
-                :_surface(surface), _window(std::move(window)) {
-            Pin()->Connect(SDL_WINDOWEVENT_CLOSE, [this](SDL::Window&, const SDL_Event&) {
-                _surface.reset(vk::SurfaceKHR());
+        explicit VulkanFacet(std::weak_ptr<SDL::Window> window, vk::UniqueSurfaceKHR surface) noexcept
+                :_surface(std::move(surface)), _window(std::move(window)) {
+            _conn = Pin()->Connect(SDL_WINDOWEVENT_CLOSE, [this](SDL::Window&, const SDL_Event&) {
+                _surface.reset();
             });
         }
 
         std::shared_ptr<SDL::Window> Pin() noexcept { return _window.lock(); }
 
         friend class Application;
-
         vk::UniqueSurfaceKHR _surface;
         std::weak_ptr<SDL::Window> _window;
+        boost::signals2::scoped_connection _conn;
     };
     
     class Application {
@@ -60,7 +62,9 @@ namespace Vulkan {
             if (!SDL_Vulkan_CreateSurface(window->GetHandleDangerous(), Instance.get(), &surface)) {
                 VulkanHandleSDLError();
             }
-            return std::unique_ptr<VulkanFacet>(new VulkanFacet(std::weak_ptr<SDL::Window>(window), surface));
+            return std::unique_ptr<VulkanFacet>(
+                    new VulkanFacet(std::weak_ptr<SDL::Window>(window),
+                            vk::UniqueSurfaceKHR(surface, {Instance.get()})));
         }
     private:
         [[noreturn]] static void VulkanHandleSDLError() {
